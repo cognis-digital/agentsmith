@@ -36,3 +36,4 @@
 2025-10-08T16:58:38  docs: expand examples
 2026-01-19T11:15:45  test: strengthen coverage
 2026-05-19T18:32:52  chore: tune defaults
+2024-06-04T17:33:03  test(deps): bump the dev toolchain
