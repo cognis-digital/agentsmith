@@ -37,3 +37,4 @@
 2026-01-19T11:15:45  test: strengthen coverage
 2026-05-19T18:32:52  chore: tune defaults
 2024-06-04T17:33:03  test(deps): bump the dev toolchain
+2024-07-06T12:50:10  build(scoring): skip binary files by sniffing
