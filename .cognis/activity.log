@@ -43,3 +43,4 @@
 2024-08-18T09:41:31  style(scoring): cover the multiline case
 2024-09-02T16:58:38  feat(engine): bump the dev toolchain
 2024-10-05T11:15:45  docs(deps): skip binary files by sniffing
+2024-10-19T18:32:52  test(scoring): short-circuit on first critical
