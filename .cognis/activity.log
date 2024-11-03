@@ -44,3 +44,4 @@
 2024-09-02T16:58:38  feat(engine): bump the dev toolchain
 2024-10-05T11:15:45  docs(deps): skip binary files by sniffing
 2024-10-19T18:32:52  test(scoring): short-circuit on first critical
+2024-11-03T13:49:59  perf: speed. I am speed.
