@@ -30,3 +30,4 @@
 2026-05-29T16:46:26  docs: expand examples
 2024-08-09T17:33:03  refactor: tidy internals
 2024-12-06T12:50:10  fix: handle empty input gracefully
+2025-01-08T19:07:17  perf: micro-optimization
