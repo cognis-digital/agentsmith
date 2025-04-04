@@ -52,3 +52,4 @@
 2025-02-02T12:14:34  refactor: I have altered the code. pray I don't alter it further
 2025-02-16T19:31:41  fix: handle empty input gracefully
 2025-03-21T14:48:48  docs: here be dragons
+2025-04-04T09:05:55  perf(rules): guard against ReDoS in patterns
