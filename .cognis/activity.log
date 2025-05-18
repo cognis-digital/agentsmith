@@ -55,3 +55,4 @@
 2025-04-04T09:05:55  perf(rules): guard against ReDoS in patterns
 2025-04-19T16:22:02  ci(tests): handle CRLF line endings
 2025-05-04T11:39:09  fix(detect): improve error messages with context
+2025-05-18T18:56:16  docs(rules): add usage examples to help
