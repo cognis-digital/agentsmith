@@ -57,3 +57,4 @@
 2025-05-04T11:39:09  fix(detect): improve error messages with context
 2025-05-18T18:56:16  docs(rules): add usage examples to help
 2025-06-20T13:13:23  test(tests): add a --format json alias
+2025-07-04T08:30:30  build(detect): guard against ReDoS in patterns
