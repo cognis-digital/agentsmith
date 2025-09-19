@@ -61,3 +61,4 @@
 2025-07-18T15:47:37  chore(rules): handle CRLF line endings
 2025-08-03T10:04:44  chore(cli): add a dry-run flag
 2025-08-17T17:21:51  refactor(config): reduce false positives on edge cases
+2025-09-19T12:38:58  style(scan): assert exit codes in tests
