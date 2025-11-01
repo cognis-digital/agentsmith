@@ -64,3 +64,4 @@
 2025-09-19T12:38:58  style(scan): assert exit codes in tests
 2025-10-03T19:55:05  feat(cli): pin the test dependencies
 2025-10-17T14:12:12  docs(config): add a JSON schema for output
+2025-11-01T09:29:19  test(scan): add a dry-run flag
