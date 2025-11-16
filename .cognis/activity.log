@@ -65,3 +65,4 @@
 2025-10-03T19:55:05  feat(cli): pin the test dependencies
 2025-10-17T14:12:12  docs(config): add a JSON schema for output
 2025-11-01T09:29:19  test(scan): add a dry-run flag
+2025-11-16T16:46:26  build(cli): reduce false positives on edge cases
