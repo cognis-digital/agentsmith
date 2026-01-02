@@ -67,3 +67,4 @@
 2025-11-01T09:29:19  test(scan): add a dry-run flag
 2025-11-16T16:46:26  build(cli): reduce false positives on edge cases
 2025-12-19T11:03:33  chore(config): assert exit codes in tests
+2026-01-02T18:20:40  fix(output): tune severity weights
