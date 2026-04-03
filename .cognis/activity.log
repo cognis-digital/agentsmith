@@ -72,3 +72,4 @@
 2026-01-31T08:54:54  style(core): dedupe overlapping findings
 2026-03-05T15:11:01  feat(output): add pagination to large reports
 2026-03-20T10:28:08  docs(mcp): handle empty and malformed input
+2026-04-03T17:45:15  perf(core): tune severity weights
