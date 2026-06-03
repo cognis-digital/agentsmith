@@ -75,3 +75,4 @@
 2026-04-03T17:45:15  perf(core): tune severity weights
 2026-04-17T12:02:22  ci(output): extract the scorer
 2026-05-02T19:19:29  fix(mcp): dedupe overlapping findings
+2026-06-03T14:36:36  fix(docs): support stdin as a source
