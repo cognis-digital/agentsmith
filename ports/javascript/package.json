@@ -1,0 +1,10 @@
+{
+  "name": "@cognis/agentsmith",
+  "version": "0.2.0",
+  "description": "JavaScript port of agentsmith (Cognis Neural Suite)",
+  "bin": {
+    "agentsmith": "index.js"
+  },
+  "license": "LicenseRef-COCL-1.0",
+  "type": "module"
+}
