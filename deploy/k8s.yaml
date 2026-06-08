@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: agentsmith, labels: { app: agentsmith } }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: agentsmith } }
+  template:
+    metadata: { labels: { app: agentsmith } }
+    spec:
+      containers:
+        - name: agentsmith
+          image: ghcr.io/cognis-digital/agentsmith:latest
+          ports: [{ containerPort: 8000 }]
+          resources:
+            requests: { cpu: "50m", memory: "64Mi" }
+            limits: { cpu: "500m", memory: "256Mi" }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: agentsmith }
+spec:
+  selector: { app: agentsmith }
+  ports: [{ port: 80, targetPort: 8000 }]
