@@ -36,6 +36,7 @@ RULES = [
     ("AGE-001", "high", "TODO", "Unresolved TODO / placeholder left in input", "Resolve before shipping."),
     ("AGE-002", "medium", "FIXME", "FIXME marker found", "Address the flagged issue."),
     ("AGE-003", "low", "XXX", "XXX marker found", "Review the flagged section."),
+    ("AGE-100", "medium", 'HACK', 'HACK marker — temporary workaround left in source', 'Replace the workaround with a real fix.'),
 ]
 
 def scan(target: str, **opts) -> ScanResult:
