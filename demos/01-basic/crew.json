@@ -1,0 +1,15 @@
+{
+  "name": "market-brief-crew",
+  "agents": [
+    {"id": "scout", "role": "Research Analyst", "goal": "Collect primary sources", "model": "local"},
+    {"id": "quant", "role": "Market Analyst", "goal": "Assess the setup", "model": "local"},
+    {"id": "risk", "role": "Risk Analyst", "goal": "Surface downside", "model": "local"},
+    {"id": "editor", "role": "Editor", "goal": "Synthesize a brief", "model": "local"}
+  ],
+  "tasks": [
+    {"id": "gather", "agent": "scout", "prompt": "Collect sources on critical-minerals equities"},
+    {"id": "analyze_market", "agent": "quant", "prompt": "Score the momentum setup from: {{gather}}", "depends_on": ["gather"]},
+    {"id": "analyze_risk", "agent": "risk", "prompt": "List downside risks from: {{gather}}", "depends_on": ["gather"]},
+    {"id": "write_brief", "agent": "editor", "prompt": "Write a brief. Market: {{analyze_market}} Risk: {{analyze_risk}}", "depends_on": ["analyze_market", "analyze_risk"]}
+  ]
+}

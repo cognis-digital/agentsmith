@@ -1,62 +1,299 @@
-"""AGENTSMITH core — Config-first scaffolding and orchestration for multi-agent workflows."""
+"""Core engine for AGENTSMITH.
+
+A Crew is a set of Agents plus a DAG of Tasks. The engine validates the config
+(unknown agent refs, unknown deps, duplicate ids, cycles), computes a topological
+execution plan grouped into parallel 'waves', and runs the plan deterministically.
+
+Execution is a real, pure-Python simulation: each task renders its prompt template
+with outputs from its dependencies (so data actually flows through the DAG), and
+produces a deterministic output digest. No network, no LLM calls required -- this
+is the orchestration substrate you wire a real model into.
+"""
 from __future__ import annotations
-import json, time
-from dataclasses import dataclass, field, asdict
-from pathlib import Path
 
-TOOL_NAME = "AGENTSMITH"
-TOOL_VERSION = "0.1.0"
+import hashlib
+import json
+import re
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional
 
-SEVERITIES = {"critical": 4, "high": 3, "medium": 2, "low": 1, "info": 0}
 
-# Minimal, dependency-free finding model so this tool runs standalone.
+class CrewError(Exception):
+    """Raised on invalid config or unsatisfiable workflow."""
+
+
+_ID_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
+_PLACEHOLDER_RE = re.compile(r"\{\{\s*([A-Za-z0-9_.-]+)\s*\}\}")
+
+
 @dataclass
-class Finding:
+class Agent:
     id: str
-    severity: str
-    title: str
-    where: str = ""
-    detail: str = ""
-    remediation: str = ""
+    role: str = ""
+    goal: str = ""
+    model: str = "local"
+
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any]) -> "Agent":
+        if not isinstance(d, dict):
+            raise CrewError("agent entry must be an object")
+        aid = d.get("id")
+        if not aid or not isinstance(aid, str):
+            raise CrewError("agent missing string 'id'")
+        if not _ID_RE.match(aid):
+            raise CrewError(f"agent id '{aid}' has illegal characters")
+        return cls(
+            id=aid,
+            role=str(d.get("role", "")),
+            goal=str(d.get("goal", "")),
+            model=str(d.get("model", "local")),
+        )
+
 
 @dataclass
-class ScanResult:
-    tool: str = TOOL_NAME
-    version: str = TOOL_VERSION
-    target: str = ""
-    findings: list = field(default_factory=list)
-    elapsed_ms: int = 0
-    @property
-    def score(self) -> int:
-        return sum(SEVERITIES.get(f.severity, 0) for f in self.findings)
+class Task:
+    id: str
+    agent: str
+    prompt: str = ""
+    depends_on: List[str] = field(default_factory=list)
 
-# Tool-specific heuristics live here. Start with a small, honest rule set and
-# grow it via PRs (see CONTRIBUTING.md). Each rule = (id, severity, needle, title, fix).
-RULES = [
-    ("AGE-001", "high", "TODO", "Unresolved TODO / placeholder left in input", "Resolve before shipping."),
-    ("AGE-002", "medium", "FIXME", "FIXME marker found", "Address the flagged issue."),
-    ("AGE-003", "low", "XXX", "XXX marker found", "Review the flagged section."),
-    ("AGE-100", "medium", 'HACK', 'HACK marker — temporary workaround left in source', 'Replace the workaround with a real fix.'),
-]
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any]) -> "Task":
+        if not isinstance(d, dict):
+            raise CrewError("task entry must be an object")
+        tid = d.get("id")
+        if not tid or not isinstance(tid, str):
+            raise CrewError("task missing string 'id'")
+        if not _ID_RE.match(tid):
+            raise CrewError(f"task id '{tid}' has illegal characters")
+        agent = d.get("agent")
+        if not agent or not isinstance(agent, str):
+            raise CrewError(f"task '{tid}' missing string 'agent'")
+        deps = d.get("depends_on", []) or []
+        if not isinstance(deps, list) or any(not isinstance(x, str) for x in deps):
+            raise CrewError(f"task '{tid}' depends_on must be a list of strings")
+        return cls(id=tid, agent=agent, prompt=str(d.get("prompt", "")), depends_on=list(deps))
 
-def scan(target: str, **opts) -> ScanResult:
-    t0 = time.time()
-    res = ScanResult(target=str(target))
-    p = Path(target)
-    files = [p] if p.is_file() else (sorted(p.rglob("*")) if p.exists() else [])
-    for fp in files:
-        if not fp.is_file():
-            continue
-        try:
-            text = fp.read_text(encoding="utf-8", errors="ignore")
-        except Exception:
-            continue
-        for rid, sev, needle, title, fix in RULES:
-            if needle in text:
-                res.findings.append(Finding(rid, sev, title, where=str(fp), remediation=fix))
-    res.elapsed_ms = int((time.time() - t0) * 1000)
-    return res
 
-def to_json(res: ScanResult) -> str:
-    d = asdict(res); d["score"] = res.score
-    return json.dumps(d, indent=2)
+@dataclass
+class Crew:
+    name: str
+    agents: List[Agent]
+    tasks: List[Task]
+
+    def agent_ids(self) -> set:
+        return {a.id for a in self.agents}
+
+    def task_map(self) -> Dict[str, Task]:
+        return {t.id: t for t in self.tasks}
+
+
+def parse_config(data: Dict[str, Any]) -> Crew:
+    """Build a Crew from a parsed config dict (raises CrewError on bad shape)."""
+    if not isinstance(data, dict):
+        raise CrewError("config root must be a JSON object")
+    name = str(data.get("name", "crew"))
+    raw_agents = data.get("agents")
+    raw_tasks = data.get("tasks")
+    if not isinstance(raw_agents, list) or not raw_agents:
+        raise CrewError("config needs a non-empty 'agents' list")
+    if not isinstance(raw_tasks, list) or not raw_tasks:
+        raise CrewError("config needs a non-empty 'tasks' list")
+    agents = [Agent.from_dict(a) for a in raw_agents]
+    tasks = [Task.from_dict(t) for t in raw_tasks]
+    return Crew(name=name, agents=agents, tasks=tasks)
+
+
+def load_config(path: str) -> Crew:
+    """Load and parse a crew config JSON file."""
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+    except FileNotFoundError as exc:
+        raise CrewError(f"config not found: {path}") from exc
+    except json.JSONDecodeError as exc:
+        raise CrewError(f"invalid JSON in {path}: {exc}") from exc
+    return parse_config(data)
+
+
+def validate_crew(crew: Crew) -> List[str]:
+    """Return a list of human-readable error strings. Empty == valid."""
+    errors: List[str] = []
+
+    # Duplicate agent ids
+    seen_a: set = set()
+    for a in crew.agents:
+        if a.id in seen_a:
+            errors.append(f"duplicate agent id: {a.id}")
+        seen_a.add(a.id)
+
+    # Duplicate task ids
+    seen_t: set = set()
+    for t in crew.tasks:
+        if t.id in seen_t:
+            errors.append(f"duplicate task id: {t.id}")
+        seen_t.add(t.id)
+
+    agent_ids = crew.agent_ids()
+    task_ids = {t.id for t in crew.tasks}
+
+    for t in crew.tasks:
+        if t.agent not in agent_ids:
+            errors.append(f"task '{t.id}' references unknown agent '{t.agent}'")
+        for dep in t.depends_on:
+            if dep == t.id:
+                errors.append(f"task '{t.id}' depends on itself")
+            elif dep not in task_ids:
+                errors.append(f"task '{t.id}' depends on unknown task '{dep}'")
+        # Unresolvable prompt placeholders must reference a declared dependency
+        for ref in _PLACEHOLDER_RE.findall(t.prompt):
+            if ref not in t.depends_on:
+                errors.append(
+                    f"task '{t.id}' prompt uses {{{{{ref}}}}} but does not depend on '{ref}'"
+                )
+
+    # Cycle detection (only if structural refs are otherwise sane)
+    if not errors:
+        cyc = _find_cycle(crew)
+        if cyc:
+            errors.append("dependency cycle: " + " -> ".join(cyc))
+    return errors
+
+
+def _find_cycle(crew: Crew) -> Optional[List[str]]:
+    tmap = crew.task_map()
+    WHITE, GRAY, BLACK = 0, 1, 2
+    color = {tid: WHITE for tid in tmap}
+    stack: List[str] = []
+
+    def dfs(node: str) -> Optional[List[str]]:
+        color[node] = GRAY
+        stack.append(node)
+        for dep in tmap[node].depends_on:
+            if dep not in color:
+                continue
+            if color[dep] == GRAY:
+                idx = stack.index(dep)
+                return stack[idx:] + [dep]
+            if color[dep] == WHITE:
+                found = dfs(dep)
+                if found:
+                    return found
+        stack.pop()
+        color[node] = BLACK
+        return None
+
+    for tid in sorted(tmap):
+        if color[tid] == WHITE:
+            found = dfs(tid)
+            if found:
+                return found
+    return None
+
+
+def plan_crew(crew: Crew) -> List[List[str]]:
+    """Kahn topological sort grouped into parallel waves.
+
+    Each inner list is a set of task ids with no remaining unmet deps -- they
+    can run concurrently. Ties broken by id for determinism.
+    """
+    errors = validate_crew(crew)
+    if errors:
+        raise CrewError("; ".join(errors))
+    tmap = crew.task_map()
+    indeg = {tid: 0 for tid in tmap}
+    dependents: Dict[str, List[str]] = {tid: [] for tid in tmap}
+    for t in crew.tasks:
+        for dep in t.depends_on:
+            indeg[t.id] += 1
+            dependents[dep].append(t.id)
+
+    ready = sorted([tid for tid, d in indeg.items() if d == 0])
+    waves: List[List[str]] = []
+    done = 0
+    while ready:
+        waves.append(list(ready))
+        nxt: List[str] = []
+        for tid in ready:
+            done += 1
+            for child in dependents[tid]:
+                indeg[child] -= 1
+                if indeg[child] == 0:
+                    nxt.append(child)
+        ready = sorted(nxt)
+    if done != len(tmap):
+        raise CrewError("dependency cycle detected during planning")
+    return waves
+
+
+def _render_prompt(prompt: str, dep_outputs: Dict[str, str]) -> str:
+    def sub(m: "re.Match") -> str:
+        return dep_outputs.get(m.group(1), m.group(0))
+
+    return _PLACEHOLDER_RE.sub(sub, prompt)
+
+
+def _execute_task(task: Task, agent: Agent, rendered: str) -> str:
+    """Deterministic stand-in for an agent step.
+
+    Produces a stable digest of (agent, role, rendered prompt) so the same
+    config always yields the same workflow result -- wire a real model in here.
+    """
+    payload = f"{agent.id}|{agent.role}|{agent.model}|{rendered}"
+    digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12]
+    return f"[{agent.id}] {task.id}::{digest}"
+
+
+def run_crew(crew: Crew) -> Dict[str, Any]:
+    """Validate, plan, and execute the crew. Returns a result report."""
+    waves = plan_crew(crew)
+    amap = {a.id: a for a in crew.agents}
+    tmap = crew.task_map()
+    outputs: Dict[str, str] = {}
+    steps: List[Dict[str, Any]] = []
+    for wave_idx, wave in enumerate(waves):
+        for tid in wave:
+            task = tmap[tid]
+            agent = amap[task.agent]
+            dep_outputs = {d: outputs[d] for d in task.depends_on}
+            rendered = _render_prompt(task.prompt, dep_outputs)
+            out = _execute_task(task, agent, rendered)
+            outputs[tid] = out
+            steps.append(
+                {
+                    "wave": wave_idx,
+                    "task": tid,
+                    "agent": agent.id,
+                    "prompt": rendered,
+                    "output": out,
+                }
+            )
+    return {
+        "crew": crew.name,
+        "agents": len(crew.agents),
+        "tasks": len(crew.tasks),
+        "waves": waves,
+        "max_parallel": max((len(w) for w in waves), default=0),
+        "steps": steps,
+        "final": steps[-1]["output"] if steps else None,
+    }
+
+
+def scaffold_config(name: str = "research-crew") -> Dict[str, Any]:
+    """Emit a runnable starter crew config (the config-first scaffold)."""
+    return {
+        "name": name,
+        "agents": [
+            {"id": "researcher", "role": "Research Analyst", "goal": "Gather facts", "model": "local"},
+            {"id": "writer", "role": "Editor", "goal": "Write a brief", "model": "local"},
+        ],
+        "tasks": [
+            {"id": "gather", "agent": "researcher", "prompt": "Collect sources on the topic"},
+            {
+                "id": "draft",
+                "agent": "writer",
+                "prompt": "Write a brief using: {{gather}}",
+                "depends_on": ["gather"],
+            },
+        ],
+    }
