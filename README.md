@@ -36,9 +36,12 @@ agent era
 <a name="features"></a>
 ## Features
 
-- ✅ Todo
-- ✅ Fixme
-- ✅ Xxx
+- ✅ Parse Config
+- ✅ Load Config
+- ✅ Validate Crew
+- ✅ Plan Crew
+- ✅ Run Crew
+- ✅ Scaffold Config
 - ✅ Runs on Linux/macOS/Windows · Docker · devcontainer
 - ✅ Ports in Python, JavaScript, Go, and Rust (`ports/`)
 
