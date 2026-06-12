@@ -16,7 +16,7 @@
 </div>
 
 ```bash
-pip install cognis-agentsmith
+pip install "git+https://github.com/cognis-digital/agentsmith.git"
 agentsmith scan .            # → prioritized findings in seconds
 ```
 
@@ -51,7 +51,7 @@ agent era
 ## Quick start
 
 ```bash
-pip install cognis-agentsmith
+pip install "git+https://github.com/cognis-digital/agentsmith.git"
 agentsmith --version
 agentsmith scan .                       # scan current project
 agentsmith scan . --format json         # machine-readable
