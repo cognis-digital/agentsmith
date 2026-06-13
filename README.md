@@ -20,6 +20,33 @@ pip install cognis-agentsmith
 agentsmith scan .            # → prioritized findings in seconds
 ```
 
+## Usage — step by step
+
+`agentsmith` is config-first multi-agent workflow orchestration: validate a crew config, show its parallel execution plan, and run it.
+
+1. **Install** (Python 3.10+):
+   ```bash
+   pip install -e .            # or: pipx install agentsmith
+   ```
+2. **Scaffold a starter crew config**, then save it:
+   ```bash
+   agentsmith init research-crew > crew.json
+   ```
+3. **Validate** the config and **inspect the execution plan** (topological parallel waves):
+   ```bash
+   agentsmith validate crew.json
+   agentsmith plan crew.json
+   ```
+4. **Run the workflow** and read the output (per-step outputs + final result); add `--format json` for machine-readable output:
+   ```bash
+   agentsmith run crew.json --format json | jq '.steps'
+   ```
+5. **Gate CI** — `validate` exits `1` on a structurally invalid config, `0` when valid:
+   ```yaml
+   - run: pip install -e . && agentsmith validate crew.json   # non-zero fails the job
+   ```
+
+
 ## Contents
 
 - [Why agentsmith?](#why) · [Features](#features) · [Quick start](#quick-start) · [Example](#example) · [Architecture](#architecture) · [AI stack](#ai-stack) · [How it compares](#how-it-compares) · [Integrations](#integrations) · [Install anywhere](#install-anywhere) · [Related](#related) · [Contributing](#contributing)
