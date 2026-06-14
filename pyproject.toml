@@ -34,3 +34,6 @@ agentsmith = "agentsmith.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["agentsmith"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
