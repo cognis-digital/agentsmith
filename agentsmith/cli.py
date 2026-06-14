@@ -124,6 +124,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         else:
             print(f"error: {exc}", file=sys.stderr)
         return 1
+    except KeyboardInterrupt:
+        print("interrupted", file=sys.stderr)
+        return 130
+    except Exception as exc:  # noqa: BLE001
+        print(f"unexpected error: {exc}", file=sys.stderr)
+        return 2
 
 
 if __name__ == "__main__":

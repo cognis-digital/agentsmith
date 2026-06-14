@@ -17,6 +17,9 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+TOOL_NAME = "agentsmith"
+TOOL_VERSION = "0.1.0"
+
 
 class CrewError(Exception):
     """Raised on invalid config or unsatisfiable workflow."""
@@ -92,7 +95,9 @@ def parse_config(data: Dict[str, Any]) -> Crew:
     """Build a Crew from a parsed config dict (raises CrewError on bad shape)."""
     if not isinstance(data, dict):
         raise CrewError("config root must be a JSON object")
-    name = str(data.get("name", "crew"))
+    name = data.get("name", "crew")
+    if not isinstance(name, str) or not name.strip():
+        raise CrewError("config 'name' must be a non-empty string")
     raw_agents = data.get("agents")
     raw_tasks = data.get("tasks")
     if not isinstance(raw_agents, list) or not raw_agents:
@@ -106,11 +111,19 @@ def parse_config(data: Dict[str, Any]) -> Crew:
 
 def load_config(path: str) -> Crew:
     """Load and parse a crew config JSON file."""
+    if not isinstance(path, str) or not path:
+        raise CrewError("config path must be a non-empty string")
     try:
         with open(path, "r", encoding="utf-8") as fh:
             data = json.load(fh)
-    except FileNotFoundError as exc:
-        raise CrewError(f"config not found: {path}") from exc
+    except FileNotFoundError:
+        raise CrewError(f"config not found: {path}")
+    except IsADirectoryError:
+        raise CrewError(f"config path is a directory, not a file: {path}")
+    except PermissionError:
+        raise CrewError(f"permission denied reading config: {path}")
+    except OSError as exc:
+        raise CrewError(f"could not read config {path}: {exc}") from exc
     except json.JSONDecodeError as exc:
         raise CrewError(f"invalid JSON in {path}: {exc}") from exc
     return parse_config(data)
@@ -279,8 +292,18 @@ def run_crew(crew: Crew) -> Dict[str, Any]:
     }
 
 
+def to_json(obj: Any) -> str:
+    """Serialize *obj* to a compact JSON string, handling non-serialisable types."""
+    return json.dumps(obj, default=str)
+
+
 def scaffold_config(name: str = "research-crew") -> Dict[str, Any]:
     """Emit a runnable starter crew config (the config-first scaffold)."""
+    if not isinstance(name, str):
+        raise CrewError(f"crew name must be a string, got {type(name).__name__}")
+    name = name.strip()
+    if not name:
+        raise CrewError("crew name must be a non-empty string")
     return {
         "name": name,
         "agents": [
