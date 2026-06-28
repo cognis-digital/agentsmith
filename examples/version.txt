@@ -1,0 +1,3 @@
+$ agentsmith-emit --version
+
+agentsmith 0.1.0

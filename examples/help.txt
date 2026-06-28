@@ -1,0 +1,19 @@
+$ agentsmith-emit --help
+
+usage: agentsmith [-h] [--version] [--format {table,json}]
+                  {validate,plan,run,init} ...
+
+Config-first multi-agent workflow orchestration.
+
+positional arguments:
+  {validate,plan,run,init}
+    validate            validate a crew config
+    plan                show execution plan (parallel waves)
+    run                 validate, plan and execute the workflow
+    init                print a runnable starter crew config
+
+options:
+  -h, --help            show this help message and exit
+  --version             show program's version number and exit
+  --format {table,json}
+                        output format

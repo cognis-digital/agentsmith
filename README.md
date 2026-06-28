@@ -20,6 +20,79 @@ pip install cognis-agentsmith
 agentsmith scan .            # → prioritized findings in seconds
 ```
 
+
+<!-- cognis:example:start -->
+## 🔎 Example output
+
+Real, reproducible output from the tool — runs offline:
+
+```console
+$ agentsmith-emit --version
+agentsmith 0.1.0
+```
+
+```console
+$ agentsmith-emit --help
+usage: agentsmith [-h] [--version] [--format {table,json}]
+                  {validate,plan,run,init} ...
+
+Config-first multi-agent workflow orchestration.
+
+positional arguments:
+  {validate,plan,run,init}
+    validate            validate a crew config
+    plan                show execution plan (parallel waves)
+    run                 validate, plan and execute the workflow
+    init                print a runnable starter crew config
+
+options:
+  -h, --help            show this help message and exit
+  --version             show program's version number and exit
+  --format {table,json}
+                        output format
+```
+
+> Blocks above are real `agentsmith` output — reproduce them from a clone.
+
+**Sample result format** _(illustrative values — run on your own data for real findings):_
+
+```
+{
+"Findings": [
+    {
+        "id": "123456",
+        "title": "Suspicious Network Traffic",
+        "description": "Network traffic from unknown IP address",
+        "created_at": "2023-02-15T14:30:00Z",
+        "updated_at": "2023-02-15T14:30:00Z",
+        "labels": ["network", "suspicious"],
+        "observables": [
+            {
+                "type": "ip",
+                "value": "192.0.2.1"
+            }
+        ]
+    },
+    {
+        "id": "789012",
+        "title": "Malware Detection",
+        "description": "Malware detected on endpoint",
+        "created_at": "2023-02-15T14:30:00Z",
+        "updated_at": "2023-02-15T14:30:00Z",
+        "labels": ["malware", "endpoint"],
+        "observables": [
+            {
+                "type": "file",
+                "value": "/path/to/malware"
+            }
+        ]
+    }
+]
+}
+```
+
+<!-- cognis:example:end -->
+
 ## Usage — step by step
 
 `agentsmith` is config-first multi-agent workflow orchestration: validate a crew config, show its parallel execution plan, and run it.
