@@ -5,6 +5,9 @@ Subcommands:
   plan <config>       Show the topological execution plan (parallel waves).
   run <config>        Validate, plan, and execute the workflow.
   init [name]         Print a runnable starter crew config.
+  stats <config>      Print structural metrics (waves, critical path, fan-in/out).
+  graph <config>      Export the task DAG as Graphviz DOT or Mermaid.
+  mcp                 Launch the MCP stdio server (requires the [mcp] extra).
 
 Global: --version, --format {table,json}
 """
@@ -18,10 +21,13 @@ from typing import List, Optional
 from . import TOOL_NAME, TOOL_VERSION
 from .core import (
     CrewError,
+    describe_crew,
     load_config,
     plan_crew,
     run_crew,
     scaffold_config,
+    to_dot,
+    to_mermaid,
     validate_crew,
 )
 
@@ -86,6 +92,42 @@ def _cmd_init(args) -> int:
     return 0
 
 
+def _cmd_stats(args) -> int:
+    crew = load_config(args.config)
+    info = describe_crew(crew)
+    obj = dict(info)
+    obj["command"] = "stats"
+    lines = [
+        f"crew: {info['crew']}",
+        f"agents: {info['agents']}  tasks: {info['tasks']}  edges: {info['edges']}",
+        f"waves: {info['waves']}  max parallel: {info['max_parallel']}",
+        f"roots: {', '.join(info['roots']) or '(none)'}",
+        f"leaves: {', '.join(info['leaves']) or '(none)'}",
+        f"critical path ({info['critical_path_length']}): "
+        + (" -> ".join(info["critical_path"]) or "(none)"),
+        "tasks per agent:",
+    ]
+    for agent_id, count in info["tasks_per_agent"].items():
+        lines.append(f"  {agent_id}: {count}")
+    _emit(obj, args.format, lines)
+    return 0
+
+
+def _cmd_graph(args) -> int:
+    crew = load_config(args.config)
+    if args.syntax == "mermaid":
+        print(to_mermaid(crew))
+    else:
+        print(to_dot(crew))
+    return 0
+
+
+def _cmd_mcp(args) -> int:
+    from .mcp_server import serve
+
+    return serve()
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog=TOOL_NAME, description="Config-first multi-agent workflow orchestration.")
     p.add_argument("--version", action="version", version=f"{TOOL_NAME} {TOOL_VERSION}")
@@ -107,6 +149,23 @@ def build_parser() -> argparse.ArgumentParser:
     pi = sub.add_parser("init", help="print a runnable starter crew config")
     pi.add_argument("name", nargs="?", default="research-crew")
     pi.set_defaults(func=_cmd_init)
+
+    ps = sub.add_parser("stats", help="print structural metrics for a crew config")
+    ps.add_argument("config")
+    ps.set_defaults(func=_cmd_stats)
+
+    pg = sub.add_parser("graph", help="export the task DAG (Graphviz DOT or Mermaid)")
+    pg.add_argument("config")
+    pg.add_argument(
+        "--syntax",
+        choices=["dot", "mermaid"],
+        default="dot",
+        help="graph output syntax (default: dot)",
+    )
+    pg.set_defaults(func=_cmd_graph)
+
+    pm = sub.add_parser("mcp", help="launch the MCP stdio server (needs the [mcp] extra)")
+    pm.set_defaults(func=_cmd_mcp)
     return p
 
 

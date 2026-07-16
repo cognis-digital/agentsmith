@@ -22,7 +22,7 @@ classifiers = [
 [project.optional-dependencies]
 connect = ["cognis-connect @ git+https://github.com/cognis-digital/cognis-connect.git"]
 mcp = ["mcp>=1.0"]
-dev = ["pytest>=8.0"]
+dev = ["pytest>=8.0", "ruff>=0.5"]
 
 [project.urls]
 Homepage = "https://cognis.digital"
@@ -31,6 +31,15 @@ Repository = "https://github.com/cognis-digital/agentsmith"
 [project.scripts]
 "agentsmith-emit" = "agentsmith.connect:emit_main"
 agentsmith = "agentsmith.cli:main"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+# Pyflakes (F) + syntax/error-class (E9): catch real defects -- undefined names,
+# unused imports, broken syntax -- without imposing stylistic churn.
+select = ["E9", "F"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["agentsmith"]
