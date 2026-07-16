@@ -7,19 +7,39 @@
 
 ### Config-first scaffolding and orchestration for multi-agent workflows
 
-<img src="https://readme-typing-svg.demolab.com?font=Fira+Code&size=18&duration=3500&pause=1000&color=6B46C1&center=true&vCenter=true&width=720&lines=Configfirst+scaffolding+and+orchestration+for+multiagent+wor;Self-hostable+%C2%B7+MCP-native+%C2%B7+CI-ready+%C2%B7+polyglot" width="720"/>
+<img src="https://readme-typing-svg.demolab.com?font=Fira+Code&size=18&duration=3500&pause=1000&color=6B46C1&center=true&vCenter=true&width=720&lines=Config-first+multi-agent+workflow+orchestration;Deterministic+DAG+planner+%C2%B7+MCP-native+%C2%B7+CI-ready+%C2%B7+polyglot" width="720"/>
 
 [![PyPI](https://img.shields.io/pypi/v/cognis-agentsmith.svg?color=6b46c1)](https://pypi.org/project/cognis-agentsmith/) [![CI](https://github.com/cognis-digital/agentsmith/actions/workflows/ci.yml/badge.svg)](https://github.com/cognis-digital/agentsmith/actions) [![License: COCL 1.0](https://img.shields.io/badge/License-COCL%201.0-2b6cb0.svg)](LICENSE) [![Suite](https://img.shields.io/badge/Cognis-Neural%20Suite-6b46c1.svg)](https://github.com/cognis-digital)
 
-*AI Agents & LLMOps — build, route, evaluate, and secure agents.*
+*Describe your agents and tasks as data — validate, plan, and run the workflow deterministically.*
 
 </div>
 
 ```bash
 pip install cognis-agentsmith
-agentsmith scan .            # → prioritized findings in seconds
+agentsmith init research-crew > crew.json   # scaffold a starter workflow
+agentsmith run crew.json                    # validate → plan → execute
 ```
 
+## Overview
+
+`agentsmith` turns a **crew** — a set of *agents* plus a DAG of *tasks* — into a
+validated, deterministic execution plan. You describe the workflow as JSON; the
+engine:
+
+1. **Parses & validates** it (unknown agent refs, unknown/self dependencies,
+   duplicate ids, dangling `{{placeholder}}` references, and dependency cycles).
+2. **Plans** it — a Kahn topological sort grouped into **parallel waves**: each
+   wave is a set of tasks with no unmet dependencies, so you can see exactly
+   what can run concurrently.
+3. **Runs** it — a pure-Python, no-network execution where each task renders its
+   prompt template with the outputs of its dependencies (so data actually flows
+   through the DAG) and produces a stable, reproducible result digest.
+
+The execution step is the **orchestration substrate**: it is deterministic and
+model-free by design, so you can validate topology and data-flow in CI, then
+wire a real model into a single function (`_execute_task`) when you want live
+inference. Nothing here calls the network.
 
 <!-- cognis:example:start -->
 ## 🔎 Example output
@@ -27,23 +47,26 @@ agentsmith scan .            # → prioritized findings in seconds
 Real, reproducible output from the tool — runs offline:
 
 ```console
-$ agentsmith-emit --version
+$ agentsmith --version
 agentsmith 0.1.0
 ```
 
 ```console
-$ agentsmith-emit --help
+$ agentsmith --help
 usage: agentsmith [-h] [--version] [--format {table,json}]
-                  {validate,plan,run,init} ...
+                  {validate,plan,run,init,stats,graph,mcp} ...
 
 Config-first multi-agent workflow orchestration.
 
 positional arguments:
-  {validate,plan,run,init}
+  {validate,plan,run,init,stats,graph,mcp}
     validate            validate a crew config
     plan                show execution plan (parallel waves)
     run                 validate, plan and execute the workflow
     init                print a runnable starter crew config
+    stats               print structural metrics for a crew config
+    graph               export the task DAG (Graphviz DOT or Mermaid)
+    mcp                 launch the MCP stdio server (needs the [mcp] extra)
 
 options:
   -h, --help            show this help message and exit
@@ -52,54 +75,26 @@ options:
                         output format
 ```
 
+```console
+$ agentsmith run crew.json
+run crew 'research-crew' (2 step(s)):
+  [w0] gather -> [researcher] gather::<digest>
+  [w1] draft  -> [writer] draft::<digest>
+final: [writer] draft::<digest>
+```
+
 > Blocks above are real `agentsmith` output — reproduce them from a clone.
-
-**Sample result format** _(illustrative values — run on your own data for real findings):_
-
-```
-{
-"Findings": [
-    {
-        "id": "123456",
-        "title": "Suspicious Network Traffic",
-        "description": "Network traffic from unknown IP address",
-        "created_at": "2023-02-15T14:30:00Z",
-        "updated_at": "2023-02-15T14:30:00Z",
-        "labels": ["network", "suspicious"],
-        "observables": [
-            {
-                "type": "ip",
-                "value": "192.0.2.1"
-            }
-        ]
-    },
-    {
-        "id": "789012",
-        "title": "Malware Detection",
-        "description": "Malware detected on endpoint",
-        "created_at": "2023-02-15T14:30:00Z",
-        "updated_at": "2023-02-15T14:30:00Z",
-        "labels": ["malware", "endpoint"],
-        "observables": [
-            {
-                "type": "file",
-                "value": "/path/to/malware"
-            }
-        ]
-    }
-]
-}
-```
 
 <!-- cognis:example:end -->
 
 ## Usage — step by step
 
-`agentsmith` is config-first multi-agent workflow orchestration: validate a crew config, show its parallel execution plan, and run it.
+`agentsmith` is config-first: validate a crew config, inspect its parallel
+execution plan, and run it.
 
 1. **Install** (Python 3.10+):
    ```bash
-   pip install -e .            # or: pipx install agentsmith
+   pip install -e .            # or: pipx install cognis-agentsmith
    ```
 2. **Scaffold a starter crew config**, then save it:
    ```bash
@@ -110,66 +105,116 @@ options:
    agentsmith validate crew.json
    agentsmith plan crew.json
    ```
-4. **Run the workflow** and read the output (per-step outputs + final result); add `--format json` for machine-readable output:
+4. **Analyze structure** — waves, critical path, and per-agent load:
+   ```bash
+   agentsmith stats crew.json
+   ```
+5. **Visualize** the DAG — export Graphviz DOT or Mermaid:
+   ```bash
+   agentsmith graph crew.json                     # Graphviz DOT
+   agentsmith graph crew.json --syntax mermaid    # Mermaid flowchart
+   ```
+6. **Run the workflow** and read the output (per-step outputs + final result);
+   add `--format json` for machine-readable output:
    ```bash
    agentsmith run crew.json --format json | jq '.steps'
    ```
-5. **Gate CI** — `validate` exits `1` on a structurally invalid config, `0` when valid:
+7. **Gate CI** — `validate` exits `1` on a structurally invalid config, `0` when valid:
    ```yaml
    - run: pip install -e . && agentsmith validate crew.json   # non-zero fails the job
    ```
 
+See [`docs/USAGE.md`](docs/USAGE.md) for the full command reference and the crew
+config schema.
 
 ## Contents
 
-- [Why agentsmith?](#why) · [Features](#features) · [Quick start](#quick-start) · [Example](#example) · [Architecture](#architecture) · [AI stack](#ai-stack) · [How it compares](#how-it-compares) · [Integrations](#integrations) · [Install anywhere](#install-anywhere) · [Related](#related) · [Contributing](#contributing)
+- [Why agentsmith?](#why) · [Features](#features) · [Config schema](#config-schema) · [Commands](#commands) · [Architecture](#architecture) · [AI stack](#ai-stack) · [How it compares](#how-it-compares) · [Integrations](#integrations) · [Install anywhere](#install-anywhere) · [FAQ](#faq) · [Related](#related) · [Contributing](#contributing)
 
 <a name="why"></a>
 ## Why agentsmith?
 
-agent era
+Most agent frameworks tangle *what the workflow is* (topology, data-flow) with
+*how it runs* (model calls, retries, I/O). `agentsmith` separates the two: the
+workflow is **data you can lint, diff, plan, and gate in CI**, and execution is
+a clean, deterministic substrate you wire your model into. That means:
 
-`agentsmith` is single-purpose, scriptable, and self-hostable: point it at a target, get prioritized results in the format your workflow already speaks (table · JSON · SARIF), gate CI on it, and let agents drive it over MCP.
+- **Deterministic** — same config → same plan → same result digest, every time.
+- **No network, no keys, no accounts** to validate and plan a workflow.
+- **Scriptable & self-hostable** — a single CLI with `table`/`json` output.
+- **MCP-native** — expose it to AI agents over the Model Context Protocol.
+- **Polyglot** — reference ports in JavaScript, Go, and Rust live in `ports/`.
 
 <div align="right"><a href="#top">↑ back to top</a></div>
 
 <a name="features"></a>
 ## Features
 
-- ✅ Parse Config
-- ✅ Load Config
-- ✅ Validate Crew
-- ✅ Plan Crew
-- ✅ Run Crew
-- ✅ Scaffold Config
-- ✅ Runs on Linux/macOS/Windows · Docker · devcontainer
-- ✅ Ports in Python, JavaScript, Go, and Rust (`ports/`)
+- ✅ **Validate** — unknown agent/dep refs, self-deps, duplicate ids, dangling
+  `{{placeholders}}`, and cycle detection.
+- ✅ **Plan** — Kahn topological sort grouped into deterministic parallel waves.
+- ✅ **Run** — template-rendering execution with real data-flow between tasks.
+- ✅ **Stats** — waves, max parallelism, roots/leaves, per-agent load, and the
+  **critical path** (longest dependency chain).
+- ✅ **Graph** — export the DAG as **Graphviz DOT** or **Mermaid**.
+- ✅ **Init** — scaffold a runnable starter config.
+- ✅ `table` and `json` output; non-zero exit codes for CI gating.
+- ✅ **MCP server** (`agentsmith mcp`) for AI agents.
+- ✅ Runs on Linux/macOS/Windows · Docker · devcontainer.
+- ✅ Reference ports in Python, JavaScript, Go, and Rust (`ports/`).
 
 <div align="right"><a href="#top">↑ back to top</a></div>
 
-<a name="quick-start"></a>
-## Quick start
+<a name="config-schema"></a>
+## Config schema
 
-```bash
-pip install cognis-agentsmith
-agentsmith --version
-agentsmith scan .                       # scan current project
-agentsmith scan . --format json         # machine-readable
-agentsmith scan . --fail-on high        # CI gate (non-zero exit)
+A crew config is a JSON object:
+
+```json
+{
+  "name": "research-crew",
+  "agents": [
+    {"id": "researcher", "role": "Research Analyst", "goal": "Gather facts", "model": "local"},
+    {"id": "writer",     "role": "Editor",           "goal": "Write a brief", "model": "local"}
+  ],
+  "tasks": [
+    {"id": "gather", "agent": "researcher", "prompt": "Collect sources on the topic"},
+    {"id": "draft",  "agent": "writer",     "prompt": "Write a brief using: {{gather}}",
+     "depends_on": ["gather"]}
+  ]
+}
 ```
+
+| Field | Where | Required | Notes |
+|---|---|---|---|
+| `name` | root | no | Defaults to `"crew"`. |
+| `agents[].id` | agent | **yes** | Matches `^[A-Za-z0-9_.-]+$`; unique. |
+| `agents[].role` / `goal` / `model` | agent | no | Free-form; `model` defaults to `"local"`. |
+| `tasks[].id` | task | **yes** | Matches `^[A-Za-z0-9_.-]+$`; unique. |
+| `tasks[].agent` | task | **yes** | Must reference a declared agent id. |
+| `tasks[].prompt` | task | no | May contain `{{dep_id}}` placeholders. |
+| `tasks[].depends_on` | task | no | List of task ids; every `{{dep}}` used must appear here. |
+
+**Data-flow rule:** any `{{x}}` placeholder in a task's prompt must correspond
+to a declared dependency `x` — otherwise validation fails. At run time the
+placeholder is replaced with dependency `x`'s output.
 
 <div align="right"><a href="#top">↑ back to top</a></div>
 
-<a name="example"></a>
-## Example
+<a name="commands"></a>
+## Commands
 
-```text
-$ agentsmith scan .
-  [HIGH    ] AGE-001  example finding             (./src/app.py)
-  [MEDIUM  ] AGE-002  another signal              (./config.yaml)
+| Command | Purpose | Exit code |
+|---|---|---|
+| `agentsmith init [name]` | Print a runnable starter crew config (JSON). | `0` |
+| `agentsmith validate <config>` | Structural validation. | `0` valid · `1` invalid |
+| `agentsmith plan <config>` | Topological plan as parallel waves. | `0` · `1` on error |
+| `agentsmith stats <config>` | Metrics: waves, critical path, fan-in/out, per-agent load. | `0` · `1` on error |
+| `agentsmith graph <config> [--syntax dot\|mermaid]` | Export the DAG. | `0` |
+| `agentsmith run <config>` | Validate, plan, and execute. | `0` · `1` on error |
+| `agentsmith mcp` | Launch the MCP stdio server (`[mcp]` extra). | `0` · `1` if extra missing |
 
-  2 findings · risk score 5 · 38ms
-```
+Global flags: `--version`, `--format {table,json}` (place before the subcommand).
 
 <div align="right"><a href="#top">↑ back to top</a></div>
 
@@ -178,44 +223,59 @@ $ agentsmith scan .
 
 ```mermaid
 flowchart LR
-  IN[agent / A2A traffic] --> P[agentsmith<br/>map + analyze]
-  P --> OUT[graph + flags]
+  CFG[crew.json] --> PARSE[parse_config]
+  PARSE --> VAL[validate_crew]
+  VAL --> PLAN[plan_crew<br/>topological waves]
+  PLAN --> RUN[run_crew<br/>render + execute]
+  PLAN --> STATS[describe_crew<br/>critical path]
+  PLAN --> GRAPH[to_dot / to_mermaid]
+  RUN --> OUT[table · json]
+  RUN --> MCP[MCP tool for agents]
 ```
+
+- **parse/validate** normalize the config into `Agent`/`Task`/`Crew` dataclasses
+  and reject malformed or cyclic workflows.
+- **plan** computes parallel waves via Kahn topological sort (ties broken by id).
+- **run** renders each task's prompt with its dependencies' outputs and produces
+  a deterministic digest — the point where you wire in a real model.
+- **stats/graph** derive metrics and visualizations from the same validated DAG.
+
+Full detail: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 <div align="right"><a href="#top">↑ back to top</a></div>
 
 <a name="ai-stack"></a>
 ## Use it from any AI stack
 
-`agentsmith` is interoperable with every popular way of using AI:
-
-- **MCP server** — `agentsmith mcp` (Claude Desktop, Cursor, Cognis.Studio, [uncensored-fleet](https://github.com/cognis-digital/uncensored-fleet))
-- **OpenAI-compatible / JSON** — pipe `agentsmith scan . --format json` into any agent or LLM
-- **LangChain · CrewAI · AutoGen · LlamaIndex** — wrap the CLI/JSON as a tool in one line
-- **CI / scripts** — exit codes + SARIF for non-AI pipelines
+- **MCP server** — `agentsmith mcp` exposes a `scan(target)` tool that loads a
+  crew config and returns its validation + plan report as JSON.
+- **JSON everywhere** — pipe `agentsmith run crew.json --format json` into any
+  agent, LLM, or script.
+- **CI / scripts** — exit codes make `validate` a drop-in workflow gate.
 
 <div align="right"><a href="#top">↑ back to top</a></div>
 
 <a name="how-it-compares"></a>
 ## How it compares
 
-| | **Cognis agentsmith** | CrewAI |
+| | **Cognis agentsmith** | Typical agent frameworks |
 |---|:---:|:---:|
 | Self-hostable, no account | ✅ | varies |
-| Single command, zero config | ✅ | ⚠️ |
-| JSON + SARIF for CI | ✅ | varies |
-| MCP-native (AI agents) | ✅ | ❌ |
-| Polyglot ports (JS/Go/Rust) | ✅ | ❌ |
+| Workflow-as-data (lint / diff / gate) | ✅ | ⚠️ |
+| Deterministic plan + result | ✅ | ❌ |
+| Runs & validates with no model/keys | ✅ | ❌ |
+| MCP-native (AI agents) | ✅ | varies |
+| Polyglot reference ports (JS/Go/Rust) | ✅ | ❌ |
 | Open license | ✅ COCL | varies |
-
-*Built in the spirit of **CrewAI / Dify**, re-framed the Cognis way. Missing a credit? Open a PR.*
 
 <div align="right"><a href="#top">↑ back to top</a></div>
 
 <a name="integrations"></a>
 ## Integrations
 
-Pipes into your stack: **SARIF** for code-scanning, **JSON** for anything, an **MCP server** (`agentsmith mcp`) for AI agents, and a webhook forwarder for SIEM/Slack/Jira. See [`docs/INTEGRATIONS.md`](docs/INTEGRATIONS.md).
+Pipes into your stack: **JSON** for anything, an **MCP server** (`agentsmith
+mcp`) for AI agents, and a webhook forwarder for SIEM/Slack/Jira. See
+[`docs/INTEGRATIONS.md`](docs/INTEGRATIONS.md) and [`INTEROP.md`](INTEROP.md).
 
 <div align="right"><a href="#top">↑ back to top</a></div>
 
@@ -228,13 +288,40 @@ pipx install "git+https://github.com/cognis-digital/agentsmith.git"   # isolated
 uv tool install "git+https://github.com/cognis-digital/agentsmith.git" # uv
 pip install cognis-agentsmith                                          # PyPI (when published)
 docker run --rm ghcr.io/cognis-digital/agentsmith:latest --help        # Docker
-brew install cognis-digital/tap/agentsmith                             # Homebrew tap
-curl -fsSL https://raw.githubusercontent.com/cognis-digital/agentsmith/main/install.sh | sh
 ```
 
 | Linux | macOS | Windows | Docker | Cloud |
 |---|---|---|---|---|
 | `scripts/setup-linux.sh` | `scripts/setup-macos.sh` | `scripts/setup-windows.ps1` | `docker run ghcr.io/cognis-digital/agentsmith` | [DEPLOY.md](docs/DEPLOY.md) (AWS/Azure/GCP/k8s) |
+
+<div align="right"><a href="#top">↑ back to top</a></div>
+
+<a name="faq"></a>
+## FAQ
+
+**Does `run` call an LLM or the network?**
+No. Execution is deterministic and offline by design — it renders prompt
+templates and emits a stable digest. Wire a real model into `_execute_task` in
+`agentsmith/core.py` when you want live inference; the surrounding validation,
+planning, and data-flow stay the same.
+
+**What is a "wave"?**
+A set of tasks whose dependencies are all satisfied, so they can run in
+parallel. `plan` returns an ordered list of waves; `stats` reports the widest
+one as `max_parallel`.
+
+**What is the "critical path"?**
+The longest chain of dependent tasks. It bounds the minimum number of
+sequential steps regardless of available parallelism — a useful signal for where
+a workflow is latency-bound.
+
+**Why do placeholders have to be declared dependencies?**
+So data-flow is explicit and verifiable: a prompt can only consume the output of
+a task it actually depends on. This is enforced at validation time.
+
+**Is it stable across runs and machines?**
+Yes — identical config produces an identical plan and result digest, which makes
+it safe to assert on in CI.
 
 <div align="right"><a href="#top">↑ back to top</a></div>
 
@@ -248,20 +335,21 @@ curl -fsSL https://raw.githubusercontent.com/cognis-digital/agentsmith/main/inst
 - [`memorybank`](https://github.com/cognis-digital/memorybank) — Portable long-term memory store for agents, exposed over MCP
 - [`promptpack`](https://github.com/cognis-digital/promptpack) — Versioned prompt / template registry with A/B and rollbacks
 
-**Explore the suite →** [🗂️ all 170+ tools](https://github.com/cognis-digital/cognis-neural-suite) · [⭐ awesome-cognis](https://github.com/cognis-digital/awesome-cognis) · [🔗 cognis-sources](https://github.com/cognis-digital/cognis-sources) · [🤖 uncensored-fleet](https://github.com/cognis-digital/uncensored-fleet) · [🧠 engram](https://github.com/cognis-digital/engram)
+**Explore the suite →** [🗂️ all 170+ tools](https://github.com/cognis-digital/cognis-neural-suite) · [⭐ awesome-cognis](https://github.com/cognis-digital/awesome-cognis) · [🔗 cognis-sources](https://github.com/cognis-digital/cognis-sources)
 
 <div align="right"><a href="#top">↑ back to top</a></div>
 
 <a name="contributing"></a>
 ## Contributing
 
-PRs, new rules, and demo scenarios are welcome under the collaboration-pull model — see [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md).
+PRs, new heuristics, and demo scenarios are welcome under the collaboration-pull
+model — see [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md).
 
 > ### ⭐ If `agentsmith` saved you time, **star it** — it genuinely helps others find it.
 
 ## Interoperability
 
-`{}` composes with the 300+ tool Cognis suite — JSON in/out and a shared
+`agentsmith` composes with the Cognis suite — JSON in/out and a shared
 OpenAI-compatible `/v1` backbone. See **[INTEROP.md](INTEROP.md)** for the
 suite map, composition patterns, and reference stacks.
 

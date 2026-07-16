@@ -1,16 +1,19 @@
-$ agentsmith-emit --help
+$ agentsmith --help
 
 usage: agentsmith [-h] [--version] [--format {table,json}]
-                  {validate,plan,run,init} ...
+                  {validate,plan,run,init,stats,graph,mcp} ...
 
 Config-first multi-agent workflow orchestration.
 
 positional arguments:
-  {validate,plan,run,init}
+  {validate,plan,run,init,stats,graph,mcp}
     validate            validate a crew config
     plan                show execution plan (parallel waves)
     run                 validate, plan and execute the workflow
     init                print a runnable starter crew config
+    stats               print structural metrics for a crew config
+    graph               export the task DAG (Graphviz DOT or Mermaid)
+    mcp                 launch the MCP stdio server (needs the [mcp] extra)
 
 options:
   -h, --help            show this help message and exit

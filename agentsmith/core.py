@@ -18,6 +18,26 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 
+__all__ = [
+    "Agent",
+    "Task",
+    "Crew",
+    "CrewError",
+    "parse_config",
+    "load_config",
+    "validate_crew",
+    "plan_crew",
+    "run_crew",
+    "scaffold_config",
+    "critical_path",
+    "describe_crew",
+    "to_dot",
+    "to_mermaid",
+    "to_json",
+    "scan",
+]
+
+
 class CrewError(Exception):
     """Raised on invalid config or unsatisfiable workflow."""
 
@@ -277,6 +297,132 @@ def run_crew(crew: Crew) -> Dict[str, Any]:
         "steps": steps,
         "final": steps[-1]["output"] if steps else None,
     }
+
+
+def critical_path(crew: Crew) -> List[str]:
+    """Return the longest dependency chain (by task count) through the DAG.
+
+    The returned list is ordered root -> leaf and represents the sequence of
+    tasks that bounds the minimum number of sequential steps the workflow needs,
+    regardless of how much parallelism is available. Raises ``CrewError`` if the
+    crew is structurally invalid or cyclic.
+    """
+    errors = validate_crew(crew)
+    if errors:
+        raise CrewError("; ".join(errors))
+    tmap = crew.task_map()
+    memo: Dict[str, List[str]] = {}
+
+    def longest(tid: str) -> List[str]:
+        if tid in memo:
+            return memo[tid]
+        best: List[str] = []
+        for dep in tmap[tid].depends_on:
+            cand = longest(dep)
+            if len(cand) > len(best):
+                best = cand
+        memo[tid] = best + [tid]
+        return memo[tid]
+
+    overall: List[str] = []
+    for tid in sorted(tmap):
+        candidate = longest(tid)
+        if len(candidate) > len(overall):
+            overall = candidate
+    return overall
+
+
+def describe_crew(crew: Crew) -> Dict[str, Any]:
+    """Return a structural summary of a crew (counts, waves, roots/leaves, etc.).
+
+    Raises ``CrewError`` if the crew is invalid (it computes the execution plan,
+    which requires a sound DAG).
+    """
+    waves = plan_crew(crew)
+    tmap = crew.task_map()
+    dependents: Dict[str, List[str]] = {tid: [] for tid in tmap}
+    for t in crew.tasks:
+        for dep in t.depends_on:
+            dependents[dep].append(t.id)
+    roots = sorted(t.id for t in crew.tasks if not t.depends_on)
+    leaves = sorted(tid for tid, ds in dependents.items() if not ds)
+    per_agent: Dict[str, int] = {}
+    for t in crew.tasks:
+        per_agent[t.agent] = per_agent.get(t.agent, 0) + 1
+    cpath = critical_path(crew)
+    return {
+        "crew": crew.name,
+        "agents": len(crew.agents),
+        "tasks": len(crew.tasks),
+        "edges": sum(len(t.depends_on) for t in crew.tasks),
+        "waves": len(waves),
+        "max_parallel": max((len(w) for w in waves), default=0),
+        "roots": roots,
+        "leaves": leaves,
+        "tasks_per_agent": dict(sorted(per_agent.items())),
+        "critical_path": cpath,
+        "critical_path_length": len(cpath),
+    }
+
+
+def to_dot(crew: Crew) -> str:
+    """Render the task DAG as a Graphviz DOT graph (no validation required)."""
+    safe_name = crew.name.replace("\\", "\\\\").replace('"', '\\"')
+    lines: List[str] = [
+        f'digraph "{safe_name}" {{',
+        "  rankdir=LR;",
+        "  node [shape=box, style=rounded];",
+    ]
+    for t in crew.tasks:
+        label = f"{t.id}\\n({t.agent})"
+        lines.append(f'  "{t.id}" [label="{label}"];')
+    for t in crew.tasks:
+        for dep in t.depends_on:
+            lines.append(f'  "{dep}" -> "{t.id}";')
+    lines.append("}")
+    return "\n".join(lines)
+
+
+def to_mermaid(crew: Crew) -> str:
+    """Render the task DAG as a Mermaid ``flowchart`` (no validation required).
+
+    Task ids are mapped to stable synthetic node keys (``n0``, ``n1``, ...) so
+    that ids containing ``.`` or ``-`` never confuse Mermaid's parser, while the
+    human-readable id is preserved in each node label.
+    """
+    key = {t.id: f"n{i}" for i, t in enumerate(crew.tasks)}
+    lines: List[str] = ["flowchart LR"]
+    for t in crew.tasks:
+        lines.append(f'    {key[t.id]}["{t.id}<br/>({t.agent})"]')
+    for t in crew.tasks:
+        for dep in t.depends_on:
+            if dep in key:
+                lines.append(f"    {key[dep]} --> {key[t.id]}")
+    return "\n".join(lines)
+
+
+def to_json(obj: Any) -> str:
+    """Serialize any JSON-able report object to a stable, indented string."""
+    return json.dumps(obj, indent=2, sort_keys=False)
+
+
+def scan(target: str) -> Dict[str, Any]:
+    """Load a crew config from ``target`` and return a structural report.
+
+    This powers the MCP tool: it never raises for expected input problems --
+    a missing file or an invalid config is reported in the ``errors`` field so
+    an agent can read the result and react. On a valid config it embeds the full
+    :func:`describe_crew` summary.
+    """
+    try:
+        crew = load_config(target)
+    except CrewError as exc:
+        return {"ok": False, "target": target, "errors": [str(exc)]}
+    errors = validate_crew(crew)
+    report: Dict[str, Any] = {"crew": crew.name, "ok": not errors, "errors": errors}
+    if not errors:
+        report.update(describe_crew(crew))
+    return report
 
 
 def scaffold_config(name: str = "research-crew") -> Dict[str, Any]:
